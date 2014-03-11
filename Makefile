@@ -13,18 +13,19 @@ DEPS	:= $(OBJECTS:.o=.deps)
 VPATH	:= $(SRCDIR):.	# allows make to loop for deps
 
 
-all:	$(TARGET)
+all:	clean $(TARGET)
 
 $(TARGET):	$(OBJECTS)
 	@echo "Linking $@..."
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 
 $(OBJDIR)/%.o:	%.c
-	@mkdir -p $(OBJDIR)
+	@mkdir -p $(OBJDIR)	# create build
 	@echo "Compiling $<..."
 	$(CC) $(CFLAGS) -MD -MF $(@:.o=.deps) -c -o $@ $<
 
 clean:
+	@echo "Cleaning..."
 	$(RM) -r $(OBJDIR) $(TARGET)
 
 -include $(DEPS)
