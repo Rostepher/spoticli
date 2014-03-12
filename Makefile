@@ -1,6 +1,6 @@
 CC		:= clang
 PKGS	:= libspotify
-CFLAGS	:= -std=c99 -ggdb -Wall `pkg-config --cflags $(PKGS)`
+CFLAGS	:= -std=gnu99 -ggdb -Wall `pkg-config --cflags $(PKGS)`
 LDFLAGS	:= `pkg-config --libs $(PKGS)` -lpthread
 
 TARGET	:= spoticli
@@ -13,7 +13,7 @@ DEPS	:= $(OBJECTS:.o=.deps)
 VPATH	:= $(SRCDIR):.	# allows make to loop for deps
 
 
-all:	clean $(TARGET)
+all:	full_clean $(TARGET)
 
 $(TARGET):	$(OBJECTS)
 	@echo "Linking $@..."
@@ -28,6 +28,10 @@ clean:
 	@echo "Cleaning..."
 	$(RM) -r $(OBJDIR) $(TARGET)
 
+full_clean:	clean
+	@echo "Removing 'tmp/'..."
+	$(RM) -r tmp/
+
 -include $(DEPS)
 
-.PHONY: clean
+.PHONY: clean full_clean

@@ -1,6 +1,7 @@
 build/
 tmp/
 **/appkey.c
+spoticli
 
 *~
 *.o

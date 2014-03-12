@@ -13,6 +13,6 @@
 
 #define log_error(str, ...) fprintf(stderr, "ERROR %s:%d: " str "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 #define log_warning(str, ...) fprintf(stderr, "WARNING %s:%d: " str "\n", __FILE__, __LINE__, ##__VA_ARGS__)
-#define log_info(str, ...) fprintf(stderr, "INFO %s:%d: " str "\n", __FILE__, __LINE__, ##__VA_ARGS__)
+#define log_info(str, ...) fprintf(stderr, "INFO  %s:%d: " str "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 
 #endif
