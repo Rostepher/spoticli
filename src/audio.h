@@ -17,8 +17,8 @@ typedef struct audio_fifo_data {
 typedef struct audio_fifo {
     TAILQ_HEAD(, audio_fifo_data) queue;
     int q_len;
-    pthread_mutex mutex;
-    pthread_cond cond;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
 } audio_fifo_t;
 
 // function prototypes

@@ -1,5 +1,5 @@
 CC		:= clang
-PKGS	:= libspotify
+PKGS	:= libspotify alsa
 CFLAGS	:= -std=gnu99 -ggdb -Wall `pkg-config --cflags $(PKGS)`
 LDFLAGS	:= `pkg-config --libs $(PKGS)` -lpthread
 

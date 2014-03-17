@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <pthread.h>
 #include <alsa/asoundlib.h>
 
@@ -41,7 +42,7 @@ static snd_pcm_t *alsa_open(char *device, int rate, int channels)
 {
     int error;
     int dir;
-    snd_pcm_t *pcm_handle
+    snd_pcm_t *pcm_handle;
     snd_pcm_hw_params_t *hw_params;
     snd_pcm_sw_params_t *sw_params;
     snd_pcm_uframes_t period_size;
@@ -54,7 +55,7 @@ static snd_pcm_t *alsa_open(char *device, int rate, int channels)
     }
     
     // allocate the hardware params struct
-    if ((error = snd_pcm_hw_params_mlloc(&hw_params)) < 0) {
+    if ((error = snd_pcm_hw_params_malloc(&hw_params)) < 0) {
         fprintf(stderr, "ALSA: unable to allocate hardware param struct (%s)\n",
                 snd_strerror(error));
         snd_pcm_close(pcm_handle);
@@ -226,7 +227,7 @@ void audio_fifo_flush(audio_fifo_t *af)
     pthread_mutex_lock(&af->mutex);
 
     // free each link in queue
-    while (afd = TAILQ_FIRST(&af->queue)) {
+    while ((afd = TAILQ_FIRST(&af->queue))) {
         TAILQ_REMOVE(&af->queue, afd, link);
         free(afd);
     }
@@ -261,14 +262,14 @@ static void *alsa_audio_start(void *audio)
         afd = audio_get(af);
 
         if (pcm_handle == NULL ||
-            cur_rate != af->rate ||
-            cur_channels != af->channels) {
+            cur_rate != afd->rate ||
+            cur_channels != afd->channels) {
             
             if (pcm_handle)
                 snd_pcm_close(pcm_handle);
 
-            cur_rate = af->rate;
-            cur_channels = af->channels;
+            cur_rate = afd->rate;
+            cur_channels = afd->channels;
 
             pcm_handle = alsa_open(PCM_DEVICE, cur_rate, cur_channels);
             if (pcm_handle == NULL) {
@@ -308,8 +309,8 @@ void audio_init(audio_fifo_t *af)
     TAILQ_INIT(&af->queue);
     af->q_len = 0;
 
-    pthread_mutex_init(&af->mutex);
-    pthread_cond_init(&af->cond);
+    pthread_mutex_init(&af->mutex, NULL);
+    pthread_cond_init(&af->cond, NULL);
 
     pthread_create(&thread_id, NULL, alsa_audio_start, af);
 }

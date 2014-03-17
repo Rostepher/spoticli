@@ -11,6 +11,7 @@
 
 #define DEBUG
 #include "debug.h"
+#include "audio.h"
 
 #define CLIENT "spoticli"
 
@@ -22,10 +23,12 @@ extern const char *username;
 extern const char *password;
 
 // globals
-static sp_session *g_session = NULL;
+static audio_fifo_t *g_audio_fifo;
 static pthread_mutex_t g_notify_mutex;
 static pthread_cond_t g_notify_cond;
 static bool g_notify_do = false;
+static bool g_playback_done = false;
+static sp_session *g_session;
 
 
 // session callbacks
@@ -44,6 +47,11 @@ static void logged_out(sp_session *session)
     debug("logged_out called");
 }
 
+static void metadata_updated(sp_session *session)
+{
+    debug("metadata_updated called");
+}
+
 static void notify_main_thread(sp_session *session)
 {
     debug("notify_main_thread called");
@@ -52,6 +60,15 @@ static void notify_main_thread(sp_session *session)
     g_notify_do = true;
     pthread_cond_signal(&g_notify_cond);
     pthread_mutex_unlock(&g_notify_mutex);
+}
+
+static void play_token_lost(sp_session *session)
+{
+    debug("play_token_lost called");
+
+    audio_fifo_flush(&g_audio_fifo);
+
+    // if currently playing a track, stop it.
 }
 
 static void log_message(sp_session *session, const char *message)
@@ -63,22 +80,63 @@ static void log_message(sp_session *session, const char *message)
 static void end_of_track(sp_session *session)
 {
     debug("end_of_track called");
+
+    pthread_mutex_lock(&g_notify_mutex);
+    g_playback_done = true;
+    g_notify_do = true;
+    pthread_cond_signal(&g_notify_cond);
+    pthread_mutex_unlock(&g_notify_mutex);
 }
 
+// function borrowed from example "jukebox" provided with libspotify
 static int music_delivery(sp_session *session,
                            const sp_audioformat *format,
                            const void *frames,
                            int num_frames)
 {
     debug("music_delivery called");
-    return 1;
+    
+    audio_fifo_t *af = &g_audio_fifo;
+    audio_fifo_data_t *afd;
+    size_t s;
+
+    if (num_frames == 0)
+        return 0;   // audio discontinuity
+
+    pthread_mutex_lock(&af->mutex);
+
+    // buffer one second of audio
+    if (af->q_len > format->sample_rate) {
+        pthread_mutex_unlock(&af->mutex);
+
+        return 0;
+    }
+
+    s = num_frames * sizeof(int16_t) * format->channels;
+
+    afd = malloc(sizeof(*afd) + s);
+    memcpy(afd->samples, frames, s);
+
+    afd->nsamples = num_frames;
+    afd->rate = format->sample_rate;
+    afd->channels = format->channels;
+
+    TAILQ_INSERT_TAIL(&af->queue, afd, link);
+    af->q_len += num_frames; // += nsamples
+
+    pthread_cond_signal(&af->cond);
+    pthread_mutex_unlock(&af->mutex);
+
+    return num_frames;
 }
 
 static sp_session_callbacks session_callbacks = {
     .logged_in          = &logged_in,
     .logged_out         = &logged_out,
+    .metadata_updated   = &metadata_updated,
     .notify_main_thread = &notify_main_thread,
     .music_delivery     = &music_delivery,
+    .play_token_lost    = &play_token_lost,
     .log_message        = &log_message,
     .end_of_track       = &end_of_track
 };
