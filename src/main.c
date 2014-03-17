@@ -89,7 +89,7 @@ static sp_session_config session_config = {
     .settings_location      = "tmp",
     .application_key        = g_appkey,
     .application_key_size   = 0,                    // set in main
-    .user_agent             = "spoticli",
+    .user_agent             = CLIENT,
     .callbacks              = &session_callbacks,
     NULL,                   // TODO
 };
@@ -112,8 +112,8 @@ int main(int argc, char **argv)
     }
 
     // init and lock mutex
-	pthread_mutex_init(&g_notify_mutex, NULL);
-	pthread_cond_init(&g_notify_cond, NULL);
+    pthread_mutex_init(&g_notify_mutex, NULL);
+    pthread_cond_init(&g_notify_cond, NULL);
     
     // log in
     sp_session_login(session, username, password, 0, NULL);
@@ -122,7 +122,7 @@ int main(int argc, char **argv)
 
     pthread_mutex_lock(&g_notify_mutex);
 
-    do {
+    while (true) {
         if (next_timeout == 0) {
             while (!g_notify_do)
                 pthread_cond_wait(&g_notify_cond, &g_notify_mutex);
@@ -145,7 +145,7 @@ int main(int argc, char **argv)
         } while (next_timeout == 0);
 
         pthread_mutex_lock(&g_notify_mutex);
-    } while (true);
+    }
 
     sp_session_release(session);
 
