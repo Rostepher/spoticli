@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <pthread.h>
 #include <alsa/asoundlib.h>
+
+#include "audio.h"
 
 #define PCM_DEVICE      "default"
 #define PERIOD_SIZE     1024
