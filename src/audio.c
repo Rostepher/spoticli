@@ -5,6 +5,7 @@
 
 #include "audio.h"
 
+
 #define PCM_DEVICE      "default"
 #define PERIOD_SIZE     1024
 #define BUFFER_SIZE     (PERIOD_SIZE * 4)
@@ -44,7 +45,7 @@ static snd_pcm_t *alsa_open(char *device, int rate, int channels)
     snd_pcm_hw_params_t *hw_params;
     snd_pcm_sw_params_t *sw_params;
     snd_pcm_uframes_t period_size;
-	snd_pcm_uframes_t buffer_size;
+    snd_pcm_uframes_t buffer_size;
 
     // open pcm and return NULL if it fails
     if (snd_pcm_open(&pcm_handle, device, SND_PCM_STREAM_PLAYBACK, 0) < 0) {
@@ -77,7 +78,7 @@ static snd_pcm_t *alsa_open(char *device, int rate, int channels)
         return NULL;
     }
 
-    // set sample format
+    // set sample format to signed 16 bit little endian
     if ((error = snd_pcm_hw_params_set_format(pcm_handle,
                     hw_params, SND_PCM_FORMAT_S16_LE)) < 0) {
         fprintf(stderr, "ALSA: unable to set sample format (%s)\n",
@@ -186,30 +187,129 @@ static snd_pcm_t *alsa_open(char *device, int rate, int channels)
 }
 
 /**
- * TODO
+ * Returns the data from the first element in the given audio_fifo_t queue.
+ * Thread safe.
+ *
+ * This function is from the "jukebox" example supplied with libspotify.
+ *
+ * @param af audio_fifo_t
  */
-static void *alsa_audio_start()
+audio_fifo_data_t *audio_get(audio_fifo_t *af)
 {
-    snd_pcm_t *pcm_handle = NULL;
+    audio_fifo_data_t *afd;
+    pthread_mutex_lock(&af->mutex);
 
-    ... // get rate and channels
+    // assign first in queue to afd, else wait
+    while ((afd = TAILQ_FIRST(&af->queue)) == NULL)
+        pthread_cond_wait(&af->cond, &af->mutex);
 
-    pcm_handle = alsa_open(PCM_DEVICE, rate, channels);
-    if (!pcm_handle) {
-        fprintf(stderr, "Unable to open ALSA device (%d channels %d Hz)\n",
-                channels, rate);
-        exit(EXIT_FAILURE);
-    }
+    // remove first element from queue 
+    TAILQ_REMOVE(&af->queue, afd, link);
+    af->q_len -= afd->nsamples;
 
-    ... // stuff
-
-    snd_pcm_writei(pcm_handle, .../* samples */, .../* nsamples */);
+    pthread_mutex_unlock(&af->mutex);
+    return afd;
 }
 
 /**
- * TODO
+ * Flushes the given audio_fifo queue of all members and resets the queue
+ * length to 0. Thread safe.
+ *
+ * This function is from the "jukebox" example supplied with libspotify.
+ *
+ * @param af audio_fifo_t
  */
-void audio_init()
+void audio_fifo_flush(audio_fifo_t *af)
 {
+    audio_fifo_data_t *afd;
 
+    pthread_mutex_lock(&af->mutex);
+
+    // free each link in queue
+    while (afd = TAILQ_FIRST(&af->queue)) {
+        TAILQ_REMOVE(&af->queue, afd, link);
+        free(afd);
+    }
+
+    af->q_len = 0;
+    pthread_mutex_unlock(&af->mutex);
+}
+
+/**
+ * Opens the alsa pcm device and feeds it the given audio. The audio pointer
+ * is cast to audio_fifo_t, and then each sample is gathered with audio_get().
+ * This function will be passed as a parameter to a pthread, hence why the
+ * argument is a void pointer.
+ *
+ * The majority of this function was borrowed from the example "jukebox"
+ * supplied with libspotify. Some variable names were changed and other
+ * minor changes to make the code more readable.
+ *
+ * @param audio void pointer to an instance of audio_fifo_t
+ */
+static void *alsa_audio_start(void *audio)
+{
+    audio_fifo_t *af = (audio_fifo_t *) audio;
+    snd_pcm_t *pcm_handle = NULL;
+    int cur_rate = 0;
+    int cur_channels = 0;
+
+    int error;
+    audio_fifo_data_t *afd;
+
+    while (true) {
+        afd = audio_get(af);
+
+        if (pcm_handle == NULL ||
+            cur_rate != af->rate ||
+            cur_channels != af->channels) {
+            
+            if (pcm_handle)
+                snd_pcm_close(pcm_handle);
+
+            cur_rate = af->rate;
+            cur_channels = af->channels;
+
+            pcm_handle = alsa_open(PCM_DEVICE, cur_rate, cur_channels);
+            if (pcm_handle == NULL) {
+                fprintf(stderr,
+                        "ALSA: unable to open pcm device (%d channels %d Hz)\n",
+                        cur_channels,
+                        cur_rate);
+                exit(EXIT_FAILURE);
+            }
+
+            error = snd_pcm_wait(pcm_handle, 1000);
+            if (error >= 0)
+                error = snd_pcm_avail_update(pcm_handle);
+
+            if (error == -EPIPE)
+                snd_pcm_prepare(pcm_handle);
+
+            snd_pcm_writei(pcm_handle, afd->samples, afd->nsamples);
+            free(afd);
+        }
+    }
+}
+
+/**
+ * Initializes the audio_fifo_t and spawns a new pthread to handle audio
+ * playback.
+ *
+ * This function is borrowed from the example "jukebox" supplied with
+ * libspotify. Some changes have been made to make it more readable.
+ *
+ * @param af audio_fifo_t
+ */
+void audio_init(audio_fifo_t *af)
+{
+    pthread_t thread_id;
+
+    TAILQ_INIT(&af->queue);
+    af->q_len = 0;
+
+    pthread_mutex_init(&af->mutex);
+    pthread_cond_init(&af->cond);
+
+    pthread_create(&thread_id, NULL, alsa_audio_start, af);
 }
