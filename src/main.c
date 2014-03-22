@@ -6,37 +6,27 @@
 #include <pthread.h>
 #include <sys/time.h>
 
-#include "spoticli.h"
-#include "session.h"
+#include "spotify.h"
 #include "audio.h"
 
-#define DEBUG
-#include "debug.h"
 
-
-// global initalizations
-sp_session *g_session = NULL;
-audio_fifo_t g_audio_fifo;
-pthread_mutex_t g_notify_mutex;
-pthread_cond_t g_notify_cond;
-bool g_notify_do = false;
-bool g_playback_done = false;
+extern const char *g_username;
+extern const char *g_password;
 
 
 int main(int argc, char **argv)
 {
     int next_timeout = 0;
 
-    // instantiate global session handle
+    // init global session handle
     session_init();
+
+    // log in
+    session_login(g_username, g_password);
 
     // init and lock mutex
     pthread_mutex_init(&g_notify_mutex, NULL);
     pthread_cond_init(&g_notify_cond, NULL);
-    
-    // log in
-    session_login(g_username, g_password);
-
     pthread_mutex_lock(&g_notify_mutex);
 
     while (true) {
@@ -57,9 +47,8 @@ int main(int argc, char **argv)
 
         pthread_mutex_unlock(&g_notify_mutex);
 
-        do {
-            sp_session_process_events(g_session, &next_timeout);
-        } while (next_timeout == 0);
+        // process events
+        session_process_events(&next_timeout);
 
         pthread_mutex_lock(&g_notify_mutex);
     }

@@ -1,22 +1,39 @@
+#include <pthread.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <stdbool.h>
-#include <string.h>
+#include <sys/time.h>
+#include <sys/types.h>
 #include <unistd.h>
-#include <pthread.h>
-
 #include <libspotify/api.h>
 
-#include "spoticli.h"
 #include "audio.h"
-#include "session.h"
+#include "queue.h"
+#include "spotify.h"
 
 #define DEBUG
 #include "debug.h"
 
+#define CLIENT_NAME         "spoticli"
+#define CACHE_LOCATION      "tmp"
+#define SETTINGS_LOCATION   "tmp"
 
-// session callbacks
+
+// global variables ////////////////////////////////////////////////////////////
+extern const uint8_t g_appkey[];
+extern const size_t g_appkey_size;
+
+static sp_session *g_session = NULL;
+static audio_fifo_t g_audio_fifo;
+static bool g_playback_done = false;
+
+pthread_mutex_t g_notify_mutex;
+pthread_cond_t g_notify_cond;
+bool g_notify_do = false;
+
+
+// session callbacks ///////////////////////////////////////////////////////////
 static void logged_in(sp_session *session, sp_error error)
 {
     debug("logged_in called");
@@ -116,7 +133,7 @@ static int music_delivery(sp_session *session,
 }
 
 
-// session structs
+// session structs /////////////////////////////////////////////////////////////
 static sp_session_callbacks session_callbacks = {
     .logged_in = &logged_in,
     .logged_out = &logged_out,
@@ -139,12 +156,12 @@ static sp_session_config session_config = {
 };
 
 
-// session wrapper
+// session management //////////////////////////////////////////////////////////
 void session_init()
 {
     sp_error error;
     sp_session *session;
-    
+
     // set appkey size
     session_config.application_key_size = g_appkey_size;
 
@@ -155,14 +172,11 @@ void session_init()
                 sp_error_message(error));
         exit(EXIT_FAILURE);
     }
-
-    // set global session handle to newley created session
-    g_session = session;
 }
 
 void session_release()
 {
-    if (!g_session)
+    if (g_session)
         sp_session_release(g_session);
 }
 
@@ -174,6 +188,40 @@ void session_login(const char *username, const char *password)
     if (error != SP_ERROR_OK) {
         fprintf(stderr, "Unable to login to spotify (%s)\n",
                 sp_error_message(error));
+        
+        // if there is a session release it
+        if (g_session)
+            session_release();
+        
         exit(EXIT_FAILURE);
     }
+}
+
+void session_logout()
+{
+    if (g_session && (sp_session_user(g_session)))
+        sp_session_logout(g_session);
+}
+
+
+// playlist management /////////////////////////////////////////////////////////
+
+
+// track management ////////////////////////////////////////////////////////////
+
+
+// browsing management /////////////////////////////////////////////////////////
+
+
+// events handling /////////////////////////////////////////////////////////////
+bool session_process_events(int *next_timeout)
+{
+    if (!g_session)
+        return false;
+
+    do {
+        sp_session_process_events(g_session, next_timeout);
+    } while (*next_timeout == 0);
+
+    return true;
 }
