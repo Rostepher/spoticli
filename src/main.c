@@ -24,7 +24,7 @@ extern const char *g_password;
 
 // globals
 static sp_session *g_session;
-static audio_fifo_t *g_audio_fifo;
+static audio_fifo_t g_audio_fifo;
 static pthread_mutex_t g_notify_mutex;
 static pthread_cond_t g_notify_cond;
 static bool g_notify_do = false;
