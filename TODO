@@ -1,0 +1,6 @@
+add volume control
+ncurses interface
+sound playback
+restructure alsa handling and structs
+album art -> ascii conversion
+

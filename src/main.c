@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include <libspotify/api.h>
 
@@ -143,8 +145,8 @@ static sp_session_callbacks session_callbacks = {
 
 static sp_session_config session_config = {
     .api_version            = SPOTIFY_API_VERSION,
-    .cache_location         = "tmp",
-    .settings_location      = "tmp",
+    .cache_location         = "",
+    .settings_location      = "",
     .application_key        = g_appkey,
     .application_key_size   = 0,                    // set in main
     .user_agent             = CLIENT,
@@ -154,6 +156,15 @@ static sp_session_config session_config = {
 
 int main(int argc, char **argv)
 {
+    char *home = getenv("HOME");
+    char *spoticli_path = "/.spoticli/";
+    char *path = malloc(strlen(home) + strlen(spoticli_path) + 1);
+    strcpy(path, home);
+    strcat(path, spoticli_path);
+    session_config.settings_location = path;
+    session_config.cache_location = path;
+    free(path);
+
     sp_error error;
     sp_session *session;
     int next_timeout = 0;
