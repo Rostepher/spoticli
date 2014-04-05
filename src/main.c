@@ -1,8 +1,5 @@
-#include <pthread.h>
 #include <signal.h>
-#include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
@@ -22,6 +19,10 @@
 extern const char *g_username;
 extern const char *g_password;
 extern session_t *g_session;
+extern pthread_mutex_t g_notify_mutex;
+extern pthread_cond_t g_notify_cond;
+extern bool g_notify_do;
+
 
 // function prototypes /////////////////////////////////////////////////////////
 static void cleanup();
@@ -44,17 +45,17 @@ int main(int argc, char **argv)
     session_init();
 
     // initialize ui
-    ui_init();
+    //ui_init();
 
     // login to spotify
     session_login(g_username, g_password);
 
-    pthread_mutex_lock(&(g_session->notify_mutex));
+    pthread_mutex_lock(&g_notify_mutex);
 
     while (true) {
         if (next_timeout == 0) {
-            while (!g_session->notify_do)
-                pthread_cond_wait(&(g_session->notify_cond), &(g_session->notify_mutex));
+            while (!g_notify_do)
+                pthread_cond_wait(&g_notify_cond, &g_notify_mutex);
         } else {
             // current time
             struct timespec ts;
@@ -64,20 +65,20 @@ int main(int argc, char **argv)
             ts.tv_sec += next_timeout / 1000;
             ts.tv_nsec += (next_timeout % 1000) * 1E6;
 
-            pthread_cond_timedwait(&(g_session->notify_cond), &(g_session->notify_mutex), &ts);
+            pthread_cond_timedwait(&g_notify_cond, &g_notify_mutex, &ts);
         }
 
-        pthread_mutex_unlock(&(g_session->notify_mutex));
+        pthread_mutex_unlock(&g_notify_mutex);
 
         do {
             sp_session_process_events(g_session->sp_session, &next_timeout);
         } while (next_timeout == 0);
 
-        pthread_mutex_lock(&(g_session->notify_mutex));
+        pthread_mutex_lock(&g_notify_mutex);
     }
 
     // exit ui
-    ui_release();
+    //ui_release();
 
     cleanup();
 

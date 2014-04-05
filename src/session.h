@@ -11,6 +11,8 @@
 typedef enum session_state {
     SESSION_OFFLINE,
     SESSION_ONLINE,
+    SESSION_LOGGED_IN,
+    SESSION_LOGGED_OUT,
     SESSION_ERROR
 } session_state_t;
 

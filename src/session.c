@@ -18,6 +18,9 @@ extern const size_t g_appkey_size;
 
 // globals /////////////////////////////////////////////////////////////////////
 session_t *g_session = NULL;
+pthread_mutex_t g_notify_mutex;
+pthread_cond_t g_notify_cond;
+bool g_notify_do = false;
 
 
 // session callback prototypes /////////////////////////////////////////////////
@@ -51,7 +54,7 @@ static sp_session_config config = {
     .cache_location         = "",
     .settings_location      = "",
     .application_key        = g_appkey,
-    .application_key_size   = 0,  // set in session_init
+    .application_key_size   = 0,
     .user_agent             = CLIENT,
     .callbacks              = &callbacks
 };
@@ -74,14 +77,14 @@ void session_init()
         exit(EXIT_FAILURE);
     }
 
-    g_session = malloc(sizeof(session_t));
-
     // init and lock mutex
-    pthread_mutex_init(&(g_session->notify_mutex), NULL);
-    pthread_cond_init(&(g_session->notify_cond), NULL);
+    pthread_mutex_init(&g_notify_mutex, NULL);
+    pthread_cond_init(&g_notify_cond, NULL);
 
-    g_session->notify_do = false;
+    // allocate global session handle
+    g_session = malloc(sizeof(session_t));
     g_session->playback_done = false;
+    g_session->state = SESSION_ONLINE;
 
     // set global session handle
     g_session->sp_session = session;
@@ -92,18 +95,29 @@ void session_release()
     if (!g_session)
         exit(EXIT_FAILURE);
 
+    pthread_mutex_destroy(&g_notify_mutex);
+    pthread_cond_destroy(&g_notify_cond);
+
     sp_session_release(g_session->sp_session);
     free(g_session);
 }
 
 void session_login(const char *username, const char *password)
 {
+    if (!g_session) {
+        debug("Unable to login without valid session\n");
+        exit(EXIT_FAILURE);
+    }
+    
     sp_session_login(g_session->sp_session, username, password, 0, NULL);
-    g_session->state = SESSION_ONLINE;
+    g_session->state = SESSION_LOGGED_IN;
 }
 
 void session_logout()
 {
+    if (!g_session || g_session->state == SESSION_OFFLINE)
+        exit(EXIT_FAILURE);
+
     sp_error error;
 
     error = sp_session_logout(g_session->sp_session);
@@ -113,7 +127,7 @@ void session_logout()
         exit(EXIT_FAILURE);
     }
 
-    g_session->state = SESSION_OFFLINE;
+    g_session->state = SESSION_LOGGED_OUT;
 }
 
 void session_search(const char *query)
@@ -162,13 +176,10 @@ static void notify_main_thread(sp_session *session)
 {
     debug("notify_main_thread called\n");
     
-    if (!g_session)
-        exit(EXIT_FAILURE);
-
-    pthread_mutex_lock(&(g_session->notify_mutex));
-    g_session->notify_do = true;
-    pthread_cond_signal(&(g_session->notify_cond));
-    pthread_mutex_unlock(&(g_session->notify_mutex));
+    pthread_mutex_lock(&g_notify_mutex);
+    g_notify_do = true;
+    pthread_cond_signal(&g_notify_cond);
+    pthread_mutex_unlock(&g_notify_mutex);
 }
 
 static void play_token_lost(sp_session *session)
@@ -189,11 +200,11 @@ static void end_of_track(sp_session *session)
 {
     debug("end_of_track called\n");
 
-    pthread_mutex_lock(&(g_session->notify_mutex));
+    pthread_mutex_lock(&g_notify_mutex);
     g_session->playback_done = true;
-    g_session->notify_do = true;
-    pthread_cond_signal(&(g_session->notify_cond));
-    pthread_mutex_unlock(&(g_session->notify_mutex));
+    g_notify_do = true;
+    pthread_cond_signal(&g_notify_cond);
+    pthread_mutex_unlock(&g_notify_mutex);
 }
 
 // function borrowed from example "jukebox" provided with libspotify
@@ -211,11 +222,11 @@ static int music_delivery(sp_session *session,
     if (num_frames == 0)
         return 0;   // audio discontinuity
 
-    pthread_mutex_lock(&af->mutex);
+    pthread_mutex_lock(&(af->mutex));
 
     // buffer one second of audio
     if (af->q_len > format->sample_rate) {
-        pthread_mutex_unlock(&af->mutex);
+        pthread_mutex_unlock(&(af->mutex));
 
         return 0;
     }
@@ -229,11 +240,11 @@ static int music_delivery(sp_session *session,
     afd->rate = format->sample_rate;
     afd->channels = format->channels;
 
-    TAILQ_INSERT_TAIL(&af->queue, afd, link);
+    TAILQ_INSERT_TAIL(&(af->queue), afd, link);
     af->q_len += num_frames; // += nsamples
 
-    pthread_cond_signal(&af->cond);
-    pthread_mutex_unlock(&af->mutex);
+    pthread_cond_signal(&(af->cond));
+    pthread_mutex_unlock(&(af->mutex));
 
     return num_frames;
 }
