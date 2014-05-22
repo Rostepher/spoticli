@@ -45,7 +45,7 @@ int main(int argc, char **argv)
     session_init();
 
     // initialize ui
-    //ui_init();
+    ui_init();
 
     // login to spotify
     session_login(g_username, g_password);
@@ -78,7 +78,7 @@ int main(int argc, char **argv)
     }
 
     // exit ui
-    //ui_release();
+    ui_release();
 
     cleanup();
 

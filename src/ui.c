@@ -14,6 +14,7 @@ void stdscr_init()
         return;
 
     initscr();
+    raw();
     noecho();
     keypad(stdscr, TRUE);
     curs_set(0);
@@ -26,6 +27,7 @@ void stdscr_release()
     if (!g_stdscr_initialized)
         return;
 
+    noraw();
     endwin();
 
     g_stdscr_initialized = false;
@@ -48,5 +50,6 @@ void ui_balance()
 
 void ui_update(bool redraw)
 {
-
+    if (redraw)
+        redrawwin(stdscr);
 }

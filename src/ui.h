@@ -1,10 +1,11 @@
 #ifndef _UI_H_
 #define _UI_H_
 
-#define _XOPEN_SOURCE_EXTENDED  // wchar_t support in ncurses
-#include <wchar.h>
 #include <stdbool.h>
 #include <ncurses.h>
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #define KEY_ESC 0x1b
 
@@ -12,6 +13,16 @@ typedef enum ui_flags {
     UI_FLAG_FOCUS = 1 << 0,
     UI_FLAG_DIRTY = 1 << 1
 } ui_flags_t;
+
+typedef ui_elem_s {
+    UI_STATUSLINE = 0,
+    UI_SIDEBAR,
+    UI_PLAYER,
+    UI_END
+} ui_elem_t;
+
+struct ui_s;
+typedef void (*ui_draw_cb_t)(struct *ui_s);
 
 typedef struct ui_s {
     WINDOW *window;
@@ -21,6 +32,8 @@ typedef struct ui_s {
     unsigned int height;
     unsigned int min_width;     // min width for ui element
     unsigned int min_height;    // min height for ui element
+
+    ui_draw_cb_t ui_draw_cb;
 } ui_t;
 
 void stdscr_init();
