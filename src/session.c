@@ -68,7 +68,7 @@ void session_init()
 
     // set appkey size
     config.application_key_size = g_appkey_size;
-    
+
     // create spotify session
     error = sp_session_create(&config, &session);
     if (error != SP_ERROR_OK) {
@@ -108,7 +108,7 @@ void session_login(const char *username, const char *password)
         debug("Unable to login without valid session\n");
         exit(EXIT_FAILURE);
     }
-    
+
     sp_session_login(g_session->sp_session, username, password, 0, NULL);
     g_session->state = SESSION_LOGGED_IN;
 }
@@ -155,7 +155,7 @@ void session_stop()
 static void logged_in(sp_session *session, sp_error error)
 {
     debug("logged_in called\n");
-    
+
     if (error != SP_ERROR_OK) {
         fprintf(stderr, "Unable to login: %s\n", sp_error_message(error));
         exit(EXIT_FAILURE);
@@ -175,10 +175,12 @@ static void metadata_updated(sp_session *session)
 static void notify_main_thread(sp_session *session)
 {
     debug("notify_main_thread called\n");
-    
+
     pthread_mutex_lock(&g_notify_mutex);
+
     g_notify_do = true;
     pthread_cond_signal(&g_notify_cond);
+
     pthread_mutex_unlock(&g_notify_mutex);
 }
 
@@ -201,47 +203,67 @@ static void end_of_track(sp_session *session)
     debug("end_of_track called\n");
 
     pthread_mutex_lock(&g_notify_mutex);
+
     g_session->playback_done = true;
     g_notify_do = true;
     pthread_cond_signal(&g_notify_cond);
+
     pthread_mutex_unlock(&g_notify_mutex);
 }
 
 // function borrowed from example "jukebox" provided with libspotify
+/**
+ * Callback for when there is decompressed audio data available.
+ *
+ * @param session active sp_session
+ * @param format audio format descriptor (sp_audioformat)
+ * @param frames points to raw PCM data as described by format
+ * @param num_frames number of available samples in frames.
+ *
+ * @return 0 if audio discontinuity, the number of frames consumed otherwise
+ */
 static int music_delivery(sp_session *session,
                            const sp_audioformat *format,
                            const void *frames,
                            int num_frames)
 {
     debug("music_delivery called\n");
-    
+
     audio_fifo_t *af = &(g_session->audio_fifo);
     audio_fifo_data_t *afd;
     size_t s;
 
+    // audio discontinuity, flush audio_fifo
     if (num_frames == 0)
-        return 0;   // audio discontinuity
+        return 0;
 
     pthread_mutex_lock(&(af->mutex));
 
     // buffer one second of audio
-    if (af->q_len > format->sample_rate) {
+    if (af->total_samples > format->sample_rate) {
         pthread_mutex_unlock(&(af->mutex));
 
         return 0;
     }
 
+
+    // FIXME maybe this should be just the sizeof audio_fifo_data_t now that
+    // the queue is not static, but a pointer
     s = num_frames * sizeof(int16_t) * format->channels;
 
     afd = malloc(sizeof(*afd) + s);
     memcpy(afd->samples, frames, s);
+    // end FIXME
+
+
 
     afd->nsamples = num_frames;
     afd->rate = format->sample_rate;
     afd->channels = format->channels;
 
-    TAILQ_INSERT_TAIL(&(af->queue), afd, link);
-    af->q_len += num_frames; // += nsamples
+    // enqueue afd and add nsamples to total_samples
+    queue_enqueue(af->queue, afd);
+    af->total_samples += num_frames;    // += nsamples
 
     pthread_cond_signal(&(af->cond));
     pthread_mutex_unlock(&(af->mutex));

@@ -1,5 +1,5 @@
-#ifndef _UI_STATUSLINE_H_
-#define _UI_STATUSLINE_H_
+#ifndef SPOTICLI_UI_STATUSLINE_H
+#define SPOTICLI_UI_STATUSLINE_H
 
 #include "ui.h"
 

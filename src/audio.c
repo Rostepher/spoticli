@@ -12,7 +12,7 @@
 #define BUFFER_SIZE     (PERIOD_SIZE * 4)
 
 
-/** 
+/**
  * Opens and returns a handle to an alsa "pulse code modulator", which handles
  * playback. This function looks like it does a lot, but most of the code is
  * very much boilerplate code with tons of error checking. A basic outline of
@@ -35,7 +35,7 @@
  * @param device device name
  * @param rate sample rate
  * @param channels channel count
- * 
+ *
  * @return a pointer to an alsa pcm handle
  */
 static snd_pcm_t *alsa_open(char *device, int rate, int channels)
@@ -53,7 +53,7 @@ static snd_pcm_t *alsa_open(char *device, int rate, int channels)
         fprintf(stderr, "ALSA: Error opening PCM device %s\n", device);
         return NULL;
     }
-    
+
     // allocate the hardware params struct
     if ((error = snd_pcm_hw_params_malloc(&hw_params)) < 0) {
         fprintf(stderr, "ALSA: unable to allocate hardware param struct (%s)\n",
@@ -61,7 +61,7 @@ static snd_pcm_t *alsa_open(char *device, int rate, int channels)
         snd_pcm_close(pcm_handle);
         return NULL;
     }
-    
+
     // intialize the hardware params struct
     if ((error = snd_pcm_hw_params_any(pcm_handle, hw_params)) < 0) {
         fprintf(stderr, "ALSA: unable to initialize hardware param struct (%s)\n",
@@ -191,8 +191,6 @@ static snd_pcm_t *alsa_open(char *device, int rate, int channels)
  * Returns the data from the first element in the given audio_fifo_t queue.
  * Thread safe.
  *
- * This function is from the "jukebox" example supplied with libspotify.
- *
  * @param af audio_fifo_t
  */
 audio_fifo_data_t *audio_get(audio_fifo_t *af)
@@ -200,13 +198,15 @@ audio_fifo_data_t *audio_get(audio_fifo_t *af)
     audio_fifo_data_t *afd;
     pthread_mutex_lock(&af->mutex);
 
-    // assign first in queue to afd, else wait
-    while ((afd = TAILQ_FIRST(&af->queue)) == NULL)
+    // wait until more audio data shows up
+    while (queue_is_empty(af->queue))
         pthread_cond_wait(&af->cond, &af->mutex);
 
-    // remove first element from queue 
-    TAILQ_REMOVE(&af->queue, afd, link);
-    af->q_len -= afd->nsamples;
+    // dequeue and cast back to audio_fifo_data_t
+    afd = (audio_fifo_data_t *) queue_dequeue(af->queue);
+
+    // update the total samples in the queue
+    af->total_sample -= adf->nsamples;
 
     pthread_mutex_unlock(&af->mutex);
     return afd;
@@ -216,23 +216,15 @@ audio_fifo_data_t *audio_get(audio_fifo_t *af)
  * Flushes the given audio_fifo queue of all members and resets the queue
  * length to 0. Thread safe.
  *
- * This function is from the "jukebox" example supplied with libspotify.
- *
  * @param af audio_fifo_t
  */
 void audio_fifo_flush(audio_fifo_t *af)
 {
-    audio_fifo_data_t *afd;
-
     pthread_mutex_lock(&af->mutex);
 
-    // free each link in queue
-    while ((afd = TAILQ_FIRST(&af->queue))) {
-        TAILQ_REMOVE(&af->queue, afd, link);
-        free(afd);
-    }
+    // flush the queue
+    queue_clean(af->queue);
 
-    af->q_len = 0;
     pthread_mutex_unlock(&af->mutex);
 }
 
@@ -264,7 +256,7 @@ static void *alsa_audio_start(void *audio)
         if (pcm_handle == NULL ||
             cur_rate != afd->rate ||
             cur_channels != afd->channels) {
-            
+
             if (pcm_handle)
                 snd_pcm_close(pcm_handle);
 
@@ -306,8 +298,11 @@ void audio_init(audio_fifo_t *af)
 {
     pthread_t thread_id;
 
-    TAILQ_INIT(&af->queue);
-    af->q_len = 0;
+    // create queue
+    af->queue = queue_create();
+
+    // set total_samples to 0
+    af->total_samples = 0;
 
     pthread_mutex_init(&af->mutex, NULL);
     pthread_cond_init(&af->cond, NULL);

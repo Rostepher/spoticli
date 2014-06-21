@@ -1,5 +1,5 @@
-#ifndef _SESSION_H_
-#define _SESSION_H_
+#ifndef SPOTICLI_SESSION_H
+#define SPOTICLI_SESSION_H
 
 #include <pthread.h>
 #include <stdbool.h>

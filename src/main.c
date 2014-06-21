@@ -27,8 +27,6 @@ extern bool g_notify_do;
 // function prototypes /////////////////////////////////////////////////////////
 static void cleanup();
 static void sigint_handler(int sig);
-static void sigterm_handler(int sig);
-static void sigsegv_handler(int sig);
 
 
 // main ////////////////////////////////////////////////////////////////////////
@@ -38,9 +36,7 @@ int main(int argc, char **argv)
 
     // register signal handlers
     signal(SIGINT, sigint_handler);
-    signal(SIGTERM, sigterm_handler);
-    signal(SIGSEGV, sigsegv_handler);
-    
+
     // initialize session
     session_init();
 
@@ -87,31 +83,18 @@ int main(int argc, char **argv)
 
 static void cleanup()
 {
-    if (g_session) {
-        if (g_session->state == SESSION_ONLINE)
-            session_logout();
+    if (!g_session)
+        return;
 
-        session_release();
-    }
+    if (g_session->state == SESSION_ONLINE)
+        session_logout();
+
+    session_release();
 }
 
 static void sigint_handler(int sig)
 {
     debug("SIGINT caught\n");
-    cleanup();
-    exit(sig);
-}
-
-static void sigterm_handler(int sig)
-{
-    debug("SIGTERM caught\n");
-    cleanup();
-    exit(sig);
-}
-
-static void sigsegv_handler(int sig)
-{
-    debug("SIGSEGV caught\n");
     cleanup();
     exit(sig);
 }

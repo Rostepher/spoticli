@@ -1,5 +1,5 @@
-#ifndef _UI_H_
-#define _UI_H_
+#ifndef SPOTICLI_UI_H
+#define SPOTICLI_UI_H
 
 #include <stdbool.h>
 #include <ncurses.h>
@@ -14,7 +14,7 @@ typedef enum ui_flags {
     UI_FLAG_DIRTY = 1 << 1
 } ui_flags_t;
 
-typedef ui_elem_s {
+typedef enum ui_elem {
     UI_STATUSLINE = 0,
     UI_SIDEBAR,
     UI_PLAYER,
