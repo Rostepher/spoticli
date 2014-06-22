@@ -211,7 +211,6 @@ static void end_of_track(sp_session *session)
     pthread_mutex_unlock(&g_notify_mutex);
 }
 
-// function borrowed from example "jukebox" provided with libspotify
 /**
  * Callback for when there is decompressed audio data available.
  *
@@ -229,9 +228,9 @@ static int music_delivery(sp_session *session,
 {
     debug("music_delivery called\n");
 
-    audio_fifo_t *af = &(g_session->audio_fifo);
-    audio_fifo_data_t *afd;
-    size_t s;
+    audio_fifo_t *af = &(g_session->audio_fifo);    // audio fifo
+    audio_data_t *ad;                               // audio data
+    size_t sample_size;
 
     // audio discontinuity, flush audio_fifo
     if (num_frames == 0)
@@ -246,23 +245,16 @@ static int music_delivery(sp_session *session,
         return 0;
     }
 
+    // allocate audio_data_t
+    ad = audio_data_create(format->channels, num_frames, format->sample_rate);
 
-    // FIXME maybe this should be just the sizeof audio_fifo_data_t now that
-    // the queue is not static, but a pointer
-    s = num_frames * sizeof(int16_t) * format->channels;
+    // copy frames into samples array
+    memcpy(ad->samples, frames, ad->sample_size);
 
-    afd = malloc(sizeof(*afd) + s);
-    memcpy(afd->samples, frames, s);
-    // end FIXME
+    // enqueue ad
+    queue_enqueue(af->queue, ad);
 
-
-
-    afd->nsamples = num_frames;
-    afd->rate = format->sample_rate;
-    afd->channels = format->channels;
-
-    // enqueue afd and add nsamples to total_samples
-    queue_enqueue(af->queue, afd);
+    // update total samples in queue
     af->total_samples += num_frames;    // += nsamples
 
     pthread_cond_signal(&(af->cond));

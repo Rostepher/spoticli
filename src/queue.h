@@ -23,7 +23,7 @@ typedef struct queue_s {
 
 queue_t *queue_create();
 void queue_destroy(queue_t *queue);
-void queue_clean(queue_t *queue);
+void queue_flush(queue_t *queue);
 void queue_enqueue(queue_t *queue, void *data);
 queue_elem_t *queue_dequeue(queue_t *queue);
 queue_elem_t *queue_peek(queue_t *queue);

@@ -10,7 +10,7 @@
  */
 static queue_elem_t *queue_elem_create(void *data, queue_elem_t *next)
 {
-    queue_elem_t *queue_elem = (queue_elem_t *) malloc(sizeof(queue_elem_t));
+    queue_elem_t *queue_elem = malloc(sizeof(queue_elem_t));
     queue_elem->data = data;
     queue_elem->next = next;
 
@@ -34,7 +34,7 @@ static void queue_elem_destroy(queue_elem_t *queue_elem)
  */
 queue_t *queue_create()
 {
-    queue_t *queue = (queue_t *) malloc(sizeof(queue_t));
+    queue_t *queue = malloc(sizeof(queue_t));
     queue->size = 0;
     queue->head = NULL;
 
@@ -52,7 +52,7 @@ queue_t *queue_create()
  */
 void queue_destroy(queue_t *queue)
 {
-    queue_clean(queue);
+    queue_flush(queue);
 
 #ifdef SPOTICLI_QUEUE_THREAD_SAFE
     pthread_mutex_destroy(&(queue->mutex));
@@ -67,7 +67,7 @@ void queue_destroy(queue_t *queue)
  *
  * @param queue pointer to queue_t
  */
-void queue_clean(queue_t *queue)
+void queue_flush(queue_t *queue)
 {
 #ifdef SPOTICLI_QUEUE_THREAD_SAFE
     pthread_mutex_lock(&(queue->mutex));

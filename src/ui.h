@@ -22,7 +22,7 @@ typedef enum ui_elem {
 } ui_elem_t;
 
 struct ui_s;
-typedef void (*ui_draw_cb_t)(struct *ui_s);
+typedef void (*ui_draw_cb_t)(struct ui_s *);
 
 typedef struct ui_s {
     WINDOW *window;

@@ -188,51 +188,10 @@ static snd_pcm_t *alsa_open(char *device, int rate, int channels)
 }
 
 /**
- * Returns the data from the first element in the given audio_fifo_t queue.
- * Thread safe.
- *
- * @param af audio_fifo_t
- */
-audio_fifo_data_t *audio_get(audio_fifo_t *af)
-{
-    audio_fifo_data_t *afd;
-    pthread_mutex_lock(&af->mutex);
-
-    // wait until more audio data shows up
-    while (queue_is_empty(af->queue))
-        pthread_cond_wait(&af->cond, &af->mutex);
-
-    // dequeue and cast back to audio_fifo_data_t
-    afd = (audio_fifo_data_t *) queue_dequeue(af->queue);
-
-    // update the total samples in the queue
-    af->total_sample -= adf->nsamples;
-
-    pthread_mutex_unlock(&af->mutex);
-    return afd;
-}
-
-/**
- * Flushes the given audio_fifo queue of all members and resets the queue
- * length to 0. Thread safe.
- *
- * @param af audio_fifo_t
- */
-void audio_fifo_flush(audio_fifo_t *af)
-{
-    pthread_mutex_lock(&af->mutex);
-
-    // flush the queue
-    queue_clean(af->queue);
-
-    pthread_mutex_unlock(&af->mutex);
-}
-
-/**
  * Opens the alsa pcm device and feeds it the given audio. The audio pointer
- * is cast to audio_fifo_t, and then each sample is gathered with audio_get().
- * This function will be passed as a parameter to a pthread, hence why the
- * argument is a void pointer.
+ * is cast to audio_fifo_t, and then each sample is gathered with
+ * audio_fifo_dequeue().This function will be passed as a parameter to a
+ * pthread, hence why the argument is a void pointer.
  *
  * The majority of this function was borrowed from the example "jukebox"
  * supplied with libspotify. Some variable names were changed and other
@@ -248,19 +207,19 @@ static void *alsa_audio_start(void *audio)
     int cur_channels = 0;
 
     int error;
-    audio_fifo_data_t *afd;
+    audio_data_t *afd;
 
     while (true) {
-        afd = audio_get(af);
+        afd = audio_fifo_dequeue(af);
 
         if (pcm_handle == NULL ||
-            cur_rate != afd->rate ||
+            cur_rate != afd->sample_rate ||
             cur_channels != afd->channels) {
 
             if (pcm_handle)
                 snd_pcm_close(pcm_handle);
 
-            cur_rate = afd->rate;
+            cur_rate = afd->sample_rate;
             cur_channels = afd->channels;
 
             pcm_handle = alsa_open(PCM_DEVICE, cur_rate, cur_channels);
@@ -286,15 +245,51 @@ static void *alsa_audio_start(void *audio)
 }
 
 /**
+ * Allocates and returns a pointer to a new audio_data_t, no data is held in
+ * the samples flexable array.
+ *
+ * @param channels number of channels
+ * @param nsamples number of samples
+ * @param rate sample rate of the audio
+ *
+ * @return pointer to new audio_data_t
+ */
+audio_data_t *audio_data_create(int channels, int nsamples, int sample_rate)
+{
+    // calculate sample size
+    size_t sample_size = nsamples * sizeof(int16_t) * channels;
+
+    // allocate with sample size
+    audio_data_t *ad = malloc(sizeof(audio_data_t) + sample_size);
+
+    ad->channels = channels;
+    ad->nsamples = nsamples;
+    ad->sample_rate = sample_rate;
+    ad->sample_size = sample_size;
+
+    return ad;
+}
+
+/**
+ * Free the allocated memory of an audio_data_t.
+ *
+ * @param ad pointer to audio_data_t
+ */
+void audio_data_destroy(audio_data_t *ad)
+{
+    free(ad);
+}
+
+/**
  * Initializes the audio_fifo_t and spawns a new pthread to handle audio
  * playback.
  *
  * This function is borrowed from the example "jukebox" supplied with
  * libspotify. Some changes have been made to make it more readable.
  *
- * @param af audio_fifo_t
+ * @param af address of audio_fifo_t allocated on the stack
  */
-void audio_init(audio_fifo_t *af)
+void audio_fifo_init(audio_fifo_t *af)
 {
     pthread_t thread_id;
 
@@ -308,4 +303,47 @@ void audio_init(audio_fifo_t *af)
     pthread_cond_init(&af->cond, NULL);
 
     pthread_create(&thread_id, NULL, alsa_audio_start, af);
+}
+
+/**
+ * Flushes the given audio_fifo queue of all members and resets the queue
+ * length to 0. Thread safe.
+ *
+ * @param af audio_fifo_t
+ */
+void audio_fifo_flush(audio_fifo_t *af)
+{
+    pthread_mutex_lock(&af->mutex);
+
+    // flush the queue
+    queue_flush(af->queue);
+
+    pthread_mutex_unlock(&af->mutex);
+}
+
+/**
+ * Returns the data from the first element in the given audio_fifo_t queue.
+ * Thread safe.
+ *
+ * @param af audio_fifo_t
+ *
+ * @return pointer to audio_fifo_t
+ */
+audio_data_t *audio_fifo_dequeue(audio_fifo_t *af)
+{
+    audio_data_t *ad;
+    pthread_mutex_lock(&af->mutex);
+
+    // wait until more audio data shows up
+    while (queue_is_empty(af->queue))
+        pthread_cond_wait(&af->cond, &af->mutex);
+
+    // dequeue and cast back to audio_data_t
+    ad = (audio_data_t *) queue_dequeue(af->queue);
+
+    // update the total samples in the queue
+    af->total_samples -= ad->nsamples;
+
+    pthread_mutex_unlock(&af->mutex);
+    return ad;
 }
