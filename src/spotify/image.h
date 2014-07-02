@@ -1,0 +1,6 @@
+#ifndef SPOTICLI_SPOTIFY_IMAGE_H
+#define SPOTICLI_SPOTIFY_IMAGE_H
+
+#include <aalib.h>
+
+#endif // SPOTICLI_SPOTIFY_IMAGE_H
