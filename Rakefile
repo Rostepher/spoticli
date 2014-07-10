@@ -16,6 +16,14 @@ directory OBJECT_DIR
 
 task :default => "build:target"
 
+task :install do
+
+end
+
+task :uninstall do
+
+end
+
 namespace :build do
     task :deps do
 
@@ -44,4 +52,8 @@ namespace :build do
         sh "#{CC} #{object_files} #{LDFLAGS} -o #{TARGET}"
     end
     CLOBBER.include("#{TARGET}")
+end
+
+namespace :test do
+
 end
